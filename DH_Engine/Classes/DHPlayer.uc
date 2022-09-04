@@ -7378,6 +7378,11 @@ exec simulated function ListWeapons()
     class'DHWeaponRegistry'.static.DumpToLog(self);
 }
 
+simulated exec function ListVehicles()
+{
+    class'DHVehicleRegistry'.static.DumpToLog(self);
+}
+
 exec function DebugStartRound()
 {
     local DHGameReplicationInfo GRI;
