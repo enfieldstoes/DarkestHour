@@ -1,6 +1,6 @@
 //==============================================================================
 // Darkest Hour: Europe '44-'45
-// Darklight Games (c) 2008-2022
+// Darklight Games (c) 2008-2023
 //==============================================================================
 
 class DarkestHourGame extends ROTeamGame
@@ -359,6 +359,7 @@ function PostBeginPlay()
         GRI.OverheadOffset = 0;
     }
 
+    GRI.AxisNationID = int(DHLevelInfo.AxisNation);
     GRI.AlliedNationID = int(DHLevelInfo.AlliedNation);
 
     // Find the location of the map bounds
@@ -2155,20 +2156,27 @@ function Killed(Controller Killer, Controller Killed, Pawn KilledPawn, class<Dam
                 {
                     BroadcastLocalizedMessage(GameMessageClass, 13, DHKiller.PlayerReplicationInfo);
 
-                    // Lock weapons for TKing, this is run twice if the TK was also a Spawn Kill (this means double violation for Spawn TKing)
-                    DHKiller.WeaponLockViolations++;
-
-                    if (DHPlayerReplicationInfo(DHKiller.PlayerReplicationInfo) != none)
+                    if (DHKiller.PlayerReplicationInfo != none)
                     {
-                        // This will override the weapon lock time, TKs have a higher time punishment, however it will not override the message on that player's screen
-                        DHKiller.LockWeapons(Min(WeaponLockTimeSecondsMaximum, DHKiller.PlayerReplicationInfo.FFKills * WeaponLockTimeSecondsFFKillsMultiplier));
-
-                        // If we haven't already informed the killer of weapon lock (in the case of spawn killing a friendly), then inform them of weapon lock for TKing
-                        if (!bInformedKillerOfWeaponLock)
+                        // Don't lock weapons on players that haven't gotten a team kill in the last 30 seconds.
+                        if (Level.TimeSeconds < DHKiller.LastTeamKillTimeSeconds + 30.0)
                         {
-                            DHKiller.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 4); // "Your weapons have been locked due to friendly fire!"
+                            // Lock weapons for TKing, this is run twice if the TK was also a Spawn Kill (this means double violation for Spawn TKing)
+                            DHKiller.WeaponLockViolations++;
+
+                            // This will override the weapon lock time, TKs have a higher time punishment, however it will not override the message on that player's screen
+                            DHKiller.LockWeapons(Min(WeaponLockTimeSecondsMaximum, DHKiller.PlayerReplicationInfo.FFKills * WeaponLockTimeSecondsFFKillsMultiplier));
+
+                            // If we haven't already informed the killer of weapon lock (in the case of spawn killing a friendly), then inform them of weapon lock for TKing
+                            if (!bInformedKillerOfWeaponLock)
+                            {
+                                DHKiller.ReceiveLocalizedMessage(class'DHWeaponsLockedMessage', 4); // "Your weapons have been locked due to friendly fire!"
+                            }
                         }
                     }
+
+                    // Record the last time the player had a team-kill.
+                    DHKiller.LastTeamKillTimeSeconds = Level.TimeSeconds;
 
                     // If bForgiveFFKillsEnabled, store the friendly Killer into the Killed player's controller, so if they choose to forgive, we'll know who to forgive
                     if (bForgiveFFKillsEnabled && DHKilled != none)
@@ -3103,11 +3111,6 @@ state ResetGameCountdown
     {
         local DHArtillerySpawner AS;
 
-        if (SquadReplicationInfo != none)
-        {
-            SquadReplicationInfo.ResetSquadInfo();
-        }
-
         if (bSwapTeams)
         {
             ChangeSides(); // Change sides if bSwapTeams is true
@@ -3145,6 +3148,11 @@ state ResetGameCountdown
             {
                 GRI.RoundWinnerTeamIndex = GRI.default.RoundWinnerTeamIndex;
                 GRI.DangerZoneUpdated();
+            }
+
+            if (SquadReplicationInfo != none)
+            {
+                SquadReplicationInfo.ResetSquadRallyPoints();
             }
 
             Level.Game.BroadcastLocalized(none, class'ROResetGameMsg', 11);
@@ -5839,8 +5847,8 @@ defaultproperties
 
     Begin Object Class=UVersion Name=VersionObject
         Major=11
-        Minor=2
-        Patch=0
+        Minor=3
+        Patch=2
         Prerelease=""
     End Object
     Version=VersionObject
